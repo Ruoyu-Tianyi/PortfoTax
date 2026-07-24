@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PortfoTax · 投后财税雷达</title>
+<style>
+  /* ===== 视觉规范：低饱和暖色系 ===== */
+  :root {
+    --bg: #faf8f5;
+    --card: #ffffff;
+    --ink: #2b2723;
+    --ink-2: #6f675c;
+    --ink-3: #a39a8c;
+    --green: #1f4d3f;
+    --green-soft: #e8f0ec;
+    --amber: #c98a2d;
+    --amber-soft: #f8efdf;
+    --red: #b4443c;
+    --red-soft: #f7e9e7;
+    --line: #e9e2d7;
+    --line-2: #f2ede4;
+    --shadow: 0 1px 2px rgba(43,39,35,.05), 0 4px 16px rgba(43,39,35,.05);
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .num, td.num, th.num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  td.num, th.num { text-align: right; }
+  a { color: var(--green); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar-inner {
+    max-width: 1160px; margin: 0 auto; padding: 0 24px;
+    height: 58px; display: flex; align-items: center; gap: 28px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; font-weight: 700; font-size: 16px; color: var(--green); }
+  .brand small { font-weight: 400; font-size: 12px; color: var(--ink-3); }
+  .nav { display: flex; gap: 4px; margin-left: auto; }
+  .nav a {
+    padding: 6px 14px; border-radius: 8px; color: var(--ink-2); font-size: 13.5px;
+  }
+  .nav a:hover { background: var(--line-2); text-decoration: none; }
+  .nav a.active { background: var(--green); color: #fff; }
+
+  .page { max-width: 1160px; margin: 0 auto; padding: 28px 24px 64px; }
+
+  /* ===== 页面标题 ===== */
+  .page-head { margin-bottom: 22px; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .page-head h1 { font-size: 22px; font-weight: 700; letter-spacing: .5px; }
+  .page-head .sub { color: var(--ink-2); font-size: 13px; margin-top: 4px; }
+
+  /* ===== 卡片 ===== */
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .card-pad { padding: 20px 22px; }
+  .section-title {
+    font-size: 15px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .section-title::before {
+    content: ""; width: 4px; height: 15px; border-radius: 2px; background: var(--green);
+  }
+
+  /* ===== KPI ===== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi { padding: 18px 22px; }
+  .kpi .label { color: var(--ink-2); font-size: 13px; display: flex; justify-content: space-between; }
+  .kpi .value { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .kpi .hint { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .kpi .value.green { color: var(--green); }
+  .kpi .value.amber { color: var(--amber); }
+  .kpi .value.red { color: var(--red); }
+
+  /* ===== 徽章 ===== */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.green .dot { background: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+  .badge.amber .dot { background: var(--amber); }
+  .badge.red { background: var(--red-soft); color: var(--red); }
+  .badge.red .dot { background: var(--red); }
+  .badge.gray { background: var(--line-2); color: var(--ink-2); }
+  .badge.gray .dot { background: var(--ink-3); }
+
+  /* ===== 企业卡片墙 ===== */
+  .company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .company-card { padding: 20px 22px; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; display: block; color: inherit; }
+  .company-card:hover { transform: translateY(-2px); text-decoration: none; box-shadow: 0 2px 4px rgba(43,39,35,.06), 0 10px 28px rgba(43,39,35,.09); }
+  .company-card .cc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .company-card h3 { font-size: 17px; font-weight: 700; }
+  .company-card .meta { color: var(--ink-2); font-size: 12.5px; margin-top: 3px; }
+  .cc-score { display: flex; align-items: baseline; gap: 6px; margin: 14px 0 10px; }
+  .cc-score .score-num { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .score-bar { height: 6px; background: var(--line-2); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+  .score-bar > div { height: 100%; border-radius: 3px; }
+  .cc-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); flex-wrap: wrap; }
+  .rule-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rule-chip { font-size: 11.5px; padding: 1px 8px; border-radius: 6px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+  .rule-chip.ok { background: var(--green-soft); color: var(--green); font-weight: 500; }
+
+  /* ===== 排行 / 分布 ===== */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } }
+  .rank-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-no { width: 22px; height: 22px; border-radius: 6px; background: var(--line-2); color: var(--ink-2); font-size: 12px; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; }
+  .rank-row:nth-child(1) .rank-no { background: var(--green); color: #fff; }
+  .rank-name { flex: 1; font-weight: 600; }
+  .rank-score { font-weight: 700; font-variant-numeric: tabular-nums; width: 42px; text-align: right; }
+  .bar-row { display: grid; grid-template-columns: 118px 1fr 44px; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; }
+  .bar-track { height: 10px; background: var(--line-2); border-radius: 5px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 5px; }
+  .bar-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+  /* ===== 表格 ===== */
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tbl th {
+    text-align: left; font-weight: 600; color: var(--ink-2); font-size: 12.5px;
+    padding: 10px 12px; border-bottom: 1px solid var(--line); background: #fcfaf7;
+  }
+  .tbl td { padding: 11px 12px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl tr.hit-row td { background: #fdf6f0; }
+
+  /* ===== 规则结果 ===== */
+  .rule-block { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; overflow: hidden; background: #fff; }
+  .rule-block.hit { border-color: #eccfb9; }
+  .rule-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; flex-wrap: wrap; }
+  .rule-id { font-weight: 700; color: var(--green); width: 34px; }
+  .rule-name { font-weight: 600; }
+  .rule-formula { color: var(--ink-3); font-size: 12.5px; flex: 1; min-width: 200px; }
+  .rule-figs { display: flex; gap: 22px; padding: 0 18px 12px 64px; font-size: 12.5px; color: var(--ink-2); flex-wrap: wrap; }
+  .rule-figs b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .ai-box { margin: 0 18px 16px 64px; background: #fbf7ef; border: 1px solid #efe0c6; border-radius: 10px; padding: 14px 16px; }
+  .ai-box .ai-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--amber); margin-bottom: 6px; }
+  .ai-box p { font-size: 13px; color: #5c5344; margin-bottom: 8px; }
+  .ai-box ul { padding-left: 18px; font-size: 13px; color: #5c5344; }
+  .ai-box li { margin-bottom: 3px; }
+  @media (max-width: 640px) { .rule-figs, .ai-box { margin-left: 0; padding-left: 18px; } .ai-box { padding: 12px; } }
+
+  /* ===== 日历 ===== */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { text-align: center; font-size: 12px; color: var(--ink-3); padding: 4px 0; font-weight: 600; }
+  .cal-day { min-height: 86px; background: #fff; border: 1px solid var(--line-2); border-radius: 10px; padding: 6px 8px; font-size: 12px; }
+  .cal-day.out { background: transparent; border-color: transparent; }
+  .cal-day.today { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+  .cal-day .d { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cal-item { margin-top: 4px; padding: 2px 6px; border-radius: 5px; font-size: 11px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-item.s-已申报 { background: var(--green-soft); color: var(--green); }
+  .cal-item.s-临期 { background: var(--amber-soft); color: var(--amber); }
+  .cal-item.s-逾期 { background: var(--red-soft); color: var(--red); }
+  .cal-item.s-未到期 { background: var(--line-2); color: var(--ink-2); }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-2); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  /* ===== 报告页 ===== */
+  .report { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 44px 52px; max-width: 860px; margin: 0 auto; }
+  .report .r-head { border-bottom: 2px solid var(--green); padding-bottom: 16px; margin-bottom: 22px; }
+  .report .r-head h1 { font-size: 24px; color: var(--green); }
+  .report .r-meta { display: flex; gap: 26px; flex-wrap: wrap; color: var(--ink-2); font-size: 12.5px; margin-top: 8px; }
+  .report h2 { font-size: 16px; color: var(--green); margin: 26px 0 12px; padding-left: 10px; border-left: 4px solid var(--green); }
+  .report .conclusion { background: #fbf7ef; border: 1px solid #efe0c6; border-radius: 10px; padding: 14px 18px; font-size: 13.5px; }
+  .print-btn {
+    background: var(--green); color: #fff; border: none; border-radius: 9px;
+    padding: 8px 18px; font-size: 13.5px; cursor: pointer; font-family: inherit;
+  }
+  .print-btn:hover { opacity: .92; }
+  .btn-ghost {
+    background: transparent; color: var(--green); border: 1px solid var(--green);
+    border-radius: 9px; padding: 7px 16px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+
+  .crumbs { font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; }
+  .empty { color: var(--ink-3); text-align: center; padding: 40px 0; }
+
+  footer.foot { text-align: center; color: var(--ink-3); font-size: 12px; padding: 20px 0 40px; }
+
+  /* ===== 打印 ===== */
+  @media print {
+    body { background: #fff; }
+    .topbar, .no-print, footer.foot { display: none !important; }
+    .page { padding: 0; max-width: none; }
+    .report { border: none; box-shadow: none; border-radius: 0; padding: 0; max-width: none; }
+    .rule-block, .card { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar no-print">
+    <div class="topbar-inner">
+      <div class="brand">PortfoTax<small>投后财税雷达 · Demo</small></div>
+      <nav class="nav" id="nav">
+        <a href="#/dashboard" data-route="dashboard">组合总览</a>
+        <a href="#/calendar" data-route="calendar">申报监测</a>
+      </nav>
+    </div>
+  </div>
+  <div class="page" id="app"></div>
+  <footer class="foot no-print">AI智汇 · 财税创变 ｜ 演示原型，数据均为虚构，仅供产品验证</footer>
+
+  <script src="data/demo.js"></script>
+  <script src="js/rules.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
