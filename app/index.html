@@ -200,6 +200,37 @@
 
   footer.foot { text-align: center; color: var(--ink-3); font-size: 12px; padding: 20px 0 40px; }
 
+  /* ===== V2：导入 / 设置 ===== */
+  .btn-danger {
+    background: transparent; color: var(--red); border: 1px solid var(--red);
+    border-radius: 9px; padding: 7px 16px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .btn-danger:hover { background: var(--red-soft); }
+  .import-panel { margin-bottom: 24px; }
+  .import-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .import-actions input[type="file"] { font-size: 13px; color: var(--ink-2); }
+  .import-msg { margin-top: 12px; font-size: 13px; }
+  .import-msg .ok, .form-msg .ok { color: var(--green); font-weight: 600; }
+  .import-msg ul, .form-msg ul { color: var(--red); padding-left: 18px; margin-top: 6px; font-size: 12.5px; }
+  .cc-del {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 6px; color: var(--ink-3);
+    font-size: 15px; line-height: 1; margin-left: 6px; border: 1px solid var(--line);
+    background: #fff; cursor: pointer; flex-shrink: 0;
+  }
+  .cc-del:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+  .set-card { margin-bottom: 20px; }
+  .set-table input[type="number"] {
+    width: 84px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px;
+    font-family: inherit; font-size: 13px; text-align: right; background: #fff; color: var(--ink);
+  }
+  .set-table input[type="number"]:focus { outline: 2px solid var(--green-soft); border-color: var(--green); }
+  .set-note { font-size: 12.5px; color: var(--ink-3); margin-top: 10px; line-height: 1.7; }
+  .chk-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; }
+  .chk-row input { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer; }
+  .form-msg { margin-top: 12px; font-size: 13px; }
+  .src-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
   /* ===== 打印 ===== */
   @media print {
     body { background: #fff; }
@@ -217,6 +248,7 @@
       <nav class="nav" id="nav">
         <a href="#/dashboard" data-route="dashboard">组合总览</a>
         <a href="#/calendar" data-route="calendar">申报监测</a>
+        <a href="#/settings" data-route="settings">系统设置</a>
       </nav>
     </div>
   </div>
@@ -225,6 +257,8 @@
 
   <script src="data/demo.js"></script>
   <script src="js/rules.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/importer.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
