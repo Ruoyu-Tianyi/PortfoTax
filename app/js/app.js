@@ -288,7 +288,39 @@
 
   /* ============================================================
    * M3 申报监测日历
+   * V2.1：日历网格动态化——月份导航（‹ 上一月 / 下一月 ›）、
+   * 「回到默认月」；默认月 = 最早未申报截止日所在月份，
+   * 无未申报事项时回退为真实当前月份。
    * ============================================================ */
+  var calView = null; // 当前浏览月份 { y, m }；null = 默认月
+
+  function monthOf(dateStr) {
+    return { y: Number(dateStr.slice(0, 4)), m: Number(dateStr.slice(5, 7)) };
+  }
+  /** 月份平移（跨年安全）：shiftMonth(2026, 12, +1) → { y: 2027, m: 1 } */
+  function shiftMonth(y, m, delta) {
+    var t = y * 12 + (m - 1) + delta;
+    return { y: Math.floor(t / 12), m: (t % 12) + 1 };
+  }
+  function sameMonth(a, b) { return a.y === b.y && a.m === b.m; }
+  /** 默认月（纯函数，供单测）：最早「未申报」截止日所在月份；全部已申报/无事项 → 真实当前月 */
+  function pickDefaultMonth(items, today) {
+    var best = null;
+    items.forEach(function (it) {
+      if (it.filed) return; // 已申报不参与
+      var mo = monthOf(it.due);
+      if (!best || mo.y * 12 + mo.m < best.y * 12 + best.m) best = mo;
+    });
+    return best || monthOf(today);
+  }
+  function calNav(delta) {
+    var base = calView || lastDefaultMonth;
+    calView = shiftMonth(base.y, base.m, delta);
+    route();
+  }
+  function calReset() { calView = null; route(); }
+  var lastDefaultMonth = null; // 最近一次渲染时的默认月（供导航基准）
+
   function renderCalendar() {
     /* 展开全部申报事项 */
     var items = [];
@@ -313,8 +345,11 @@
         "<td>" + statusBadge(it.status) + '</td><td style="font-size:12.5px">' + desc + "</td></tr>";
     }).join("") : '<tr><td colspan="6" class="empty">暂无临期或逾期事项</td></tr>';
 
-    /* 6 月日历网格（演示期间所在月份） */
-    var y = 2026, m = 6;
+    /* V2.1 日历网格：浏览月份 = 用户选择 || 默认月（最早未申报截止日所在月） */
+    var defaultMonth = pickDefaultMonth(items, todayStr());
+    lastDefaultMonth = defaultMonth;
+    var view = calView || defaultMonth;
+    var y = view.y, m = view.m;
     var first = new Date(y, m - 1, 1);
     var startDow = first.getDay();
     var daysInMonth = new Date(y, m, 0).getDate();
@@ -344,6 +379,19 @@
     var stat = { "已申报": 0, "临期": 0, "逾期": 0, "未到期": 0 };
     items.forEach(function (it) { stat[it.status]++; });
 
+    /* V2.1 月份导航条 + 非默认月轻提示 */
+    var browsing = calView && !sameMonth(view, defaultMonth);
+    var calNavBar =
+      '<div class="cal-nav">' +
+        '<button class="btn-ghost cal-nav-btn" onclick="PortfoTaxApp.calNav(-1)">‹ 上一月</button>' +
+        '<span class="cal-nav-title">' + y + ' 年 ' + m + ' 月</span>' +
+        '<button class="btn-ghost cal-nav-btn" onclick="PortfoTaxApp.calNav(1)">下一月 ›</button>' +
+        '<button class="btn-ghost cal-nav-btn" onclick="PortfoTaxApp.calReset()">回到默认月</button>' +
+        (browsing
+          ? '<span class="badge amber"><span class="dot"></span>当前浏览：' + y + ' 年 ' + m + ' 月（默认月：' + defaultMonth.y + ' 年 ' + defaultMonth.m + ' 月）</span>'
+          : "") +
+      '</div>';
+
     return '<div class="page-head"><div><h1>申报监测日历</h1>' +
       '<div class="sub">企业 × 税种申报期限 · 演示基准日 ' + calBase + (getImported().length ? " · 导入企业按真实当天 " + todayStr() + " 评估" : "") + " · 状态机：已申报 / 临期（≤3 天）/ 逾期</div></div>" +
       '<div class="legend">' +
@@ -353,7 +401,8 @@
         '<span><i style="background:#a39a8c"></i>未到期 ' + stat["未到期"] + '</span></div></div>' +
       '<div class="card card-pad" style="margin-bottom:20px"><div class="section-title">风险提醒（按逾期天数排序）</div>' +
         '<table class="tbl"><tr><th>企业</th><th>税种</th><th>所属期</th><th class="num">截止日</th><th>状态</th><th>说明</th></tr>' + alertRows + "</table></div>" +
-      '<div class="card card-pad"><div class="section-title">2026 年 6 月申报日历</div>' +
+      '<div class="card card-pad"><div class="section-title">' + y + ' 年 ' + m + ' 月申报日历</div>' +
+        calNavBar +
         '<div class="cal-grid">' + cells + "</div></div>";
   }
 
@@ -695,6 +744,9 @@
 
     computeEvals();
 
+    /* V2.1：离开日历页后，下次进入时回到默认月 */
+    if (page !== "calendar") calView = null;
+
     document.querySelectorAll("#nav a").forEach(function (a) {
       a.classList.toggle("active", a.getAttribute("data-route") === page);
     });
@@ -717,6 +769,11 @@
     downloadTemplate: downloadTemplate,
     saveSettings: saveSettings,
     resetConfig: resetConfig,
+    calNav: calNav,
+    calReset: calReset,
+    /* 纯函数导出（供 Node 单测） */
+    _pickDefaultMonth: pickDefaultMonth,
+    _shiftMonth: shiftMonth,
     rerender: route
   };
 
