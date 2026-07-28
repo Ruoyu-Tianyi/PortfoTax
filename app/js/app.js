@@ -1,7 +1,8 @@
 /* ============================================================
- * PortfoTax · 路由与渲染 V2（原生 JS，零构建，兼容 file://）
+ * PortfoTax · 路由与渲染 V2.2（原生 JS，零构建，兼容 file://）
  * 路由：#/dashboard  #/company/:id  #/calendar  #/report/:id  #/settings
  * V2：CSV 导入（localStorage 持久化）/ 基准日动态化 / 规则参数化
+ * V2.2：xlsx 直接导入（本地 vendored SheetJS）+ Excel 模板下载，CSV 双文件方式保留
  * ============================================================ */
 (function () {
   "use strict";
@@ -118,18 +119,20 @@
           '<div class="hint">R1–R6 一致性校验 · 期间 ' + META.periodLabel + '</div></div>' +
       '</div>';
 
-    /* V2 导入面板 */
+    /* V2.2 导入面板（CSV 双文件 + xlsx 单文件，可混选） */
     var importPanel =
       '<div class="card card-pad import-panel" id="importPanel" style="display:' + (importOpen ? "block" : "none") + '">' +
-        '<div class="section-title">导入被投企业数据（CSV）</div>' +
+        '<div class="section-title">导入被投企业数据（CSV / Excel）</div>' +
         '<div style="font-size:13px;color:var(--ink-2);margin-bottom:12px;line-height:1.8">' +
-          '选择「三表关键科目」CSV（必选，每企业一行）与「申报记录」CSV（可选，每企业每税种一行），' +
-          '可按住 Ctrl / Shift 一次多选两个文件，系统按表头自动识别类型；' +
-          '也可以先只导入财务科目，申报记录随下一批一起导入。<br>' +
+          '<b>方式一（推荐）</b>：直接选择「下载 Excel 模板」生成的 .xlsx 文件（含「填报说明 / 三表关键科目 / 申报记录」三个工作表，按表名识别）；' +
+          '<b>方式二</b>：选择「三表关键科目」CSV（必选）与「申报记录」CSV（可选）两个文件。' +
+          '两种方式可按住 Ctrl / Shift 一次多选混选；申报记录缺失时视为暂无申报记录。<br>' +
           '导入企业以真实当天日期（' + todayStr() + '）为基准日评估，数据保存在本机浏览器（localStorage），刷新不丢失。' +
+          (window.XLSX ? "" : '<br><span style="color:var(--amber);font-weight:600">提示：Excel 解析组件（SheetJS vendor）未加载，当前仅支持 CSV 导入；CSV 功能不受影响。</span>') +
         '</div>' +
         '<div class="import-actions">' +
-          '<input type="file" id="importFile" accept=".csv,text/csv" multiple onchange="PortfoTaxApp.handleFiles(this.files)">' +
+          '<input type="file" id="importFile" accept=".csv,.xlsx,text/csv" multiple onchange="PortfoTaxApp.handleFiles(this.files)">' +
+          '<button class="btn-ghost" onclick="PortfoTaxApp.downloadExcelTemplate()">下载 Excel 模板</button>' +
           '<button class="btn-ghost" onclick="PortfoTaxApp.downloadTemplate(\'finance\')">下载财务科目模板</button>' +
           '<button class="btn-ghost" onclick="PortfoTaxApp.downloadTemplate(\'filings\')">下载申报记录模板</button>' +
           '<button class="btn-danger" onclick="PortfoTaxApp.clearImported()">清除全部导入数据</button>' +
@@ -560,30 +563,63 @@
    * ============================================================ */
   function toggleImport() { importOpen = !importOpen; route(); }
 
+  function isXlsxName(name) { return /\.xlsx$/i.test(String(name || "")); }
+
+  /* V2.2：CSV 用 readAsText；xlsx 用 readAsArrayBuffer（XLSX.read 在 processImports 容错解析） */
   function handleFiles(fileList) {
     var files = [];
     for (var i = 0; i < fileList.length; i++) files.push(fileList[i]);
     if (!files.length) return;
-    var texts = [], done = 0;
+    var payloads = [], done = 0;
     files.forEach(function (f, idx) {
       var reader = new FileReader();
-      reader.onload = function () { texts[idx] = String(reader.result); if (++done === files.length) processImports(files, texts); };
-      reader.onerror = function () { texts[idx] = null; if (++done === files.length) processImports(files, texts); };
-      reader.readAsText(f, "UTF-8");
+      var finish = function (val) { payloads[idx] = val; if (++done === files.length) processImports(files, payloads); };
+      reader.onload = function () { finish(reader.result); };
+      reader.onerror = function () { finish(null); };
+      if (isXlsxName(f.name)) reader.readAsArrayBuffer(f);
+      else reader.readAsText(f, "UTF-8");
     });
   }
 
-  function processImports(files, texts) {
+  function processImports(files, payloads) {
     var errors = [], finText = null, filText = null;
     files.forEach(function (f, i) {
-      var text = texts[i];
-      if (text == null) { errors.push("文件「" + f.name + "」读取失败"); return; }
+      var data = payloads[i];
+      if (data == null) { errors.push("文件「" + f.name + "」读取失败"); return; }
+
+      if (isXlsxName(f.name)) {
+        /* V2.2 xlsx 分支：vendor 缺失或解析失败时友好提示，不影响同批 CSV */
+        if (!window.XLSX) {
+          errors.push("文件「" + f.name + "」：Excel 解析组件（SheetJS vendor）未加载或文件缺失，无法导入 xlsx；请改用 CSV 导入（CSV 功能不受影响）");
+          return;
+        }
+        var wb;
+        try {
+          wb = window.XLSX.read(new Uint8Array(data), { type: "array", cellDates: true });
+        } catch (ex) {
+          errors.push("文件「" + f.name + "」xlsx 解析失败：" + (ex && ex.message ? ex.message : "文件损坏或不是有效的 Excel 文件"));
+          return;
+        }
+        var parts = Importer.xlsxToParts(wb, window.XLSX);
+        errors = errors.concat(parts.errors);
+        if (parts.finText != null) {
+          if (finText != null) errors.push("文件「" + f.name + "」：检测到多个「三表关键科目」数据源，已忽略该文件的财务科目表");
+          else finText = parts.finText;
+        }
+        if (parts.filText != null) {
+          if (filText != null) errors.push("文件「" + f.name + "」：检测到多个「申报记录」数据源，已忽略该文件的申报记录表");
+          else filText = parts.filText;
+        }
+        return;
+      }
+
+      var text = String(data);
       var type = Importer.detectType(text);
       if (type === "finance") {
-        if (finText != null) errors.push("文件「" + f.name + "」：检测到多个财务科目 CSV，已忽略该文件");
+        if (finText != null) errors.push("文件「" + f.name + "」：检测到多个「三表关键科目」数据源，已忽略该文件");
         else finText = text;
       } else if (type === "filings") {
-        if (filText != null) errors.push("文件「" + f.name + "」：检测到多个申报记录 CSV，已忽略该文件");
+        if (filText != null) errors.push("文件「" + f.name + "」：检测到多个「申报记录」数据源，已忽略该文件");
         else filText = text;
       } else {
         errors.push("文件「" + f.name + "」表头无法识别：既不是「三表关键科目」也不是「申报记录」模板，请下载模板核对");
@@ -591,7 +627,7 @@
     });
 
     if (!finText) {
-      errors.push("缺少有效的「三表关键科目」CSV（财务科目为必选；申报记录 CSV 需与之一同导入）");
+      errors.push("缺少有效的「三表关键科目」数据（财务科目为必选；申报记录需与之一同导入）");
       showImportResult(0, [], errors);
       return;
     }
@@ -667,6 +703,36 @@
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  }
+
+  /* V2.2：用本地 vendored SheetJS 直接生成三工作表 xlsx 模板供下载 */
+  function downloadExcelTemplate() {
+    if (!window.XLSX) {
+      importOpen = true;
+      lastImportMsg = "<ul><li>Excel 模板生成组件（SheetJS vendor）未加载或文件缺失，暂时无法生成 xlsx 模板；请使用 CSV 模板（功能不受影响）。</li></ul>";
+      route();
+      return;
+    }
+    try {
+      var XLSX = window.XLSX;
+      var wb = XLSX.utils.book_new();
+      Importer.buildTemplateSheets().forEach(function (s) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.aoa), s.name);
+      });
+      var out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      var blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "PortfoTax导入模板.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    } catch (ex) {
+      importOpen = true;
+      lastImportMsg = "<ul><li>Excel 模板生成失败：" + esc(ex && ex.message ? ex.message : String(ex)) + "；请改用 CSV 模板。</li></ul>";
+      route();
+    }
   }
 
   /* ---------- 设置保存 / 恢复默认 ---------- */
@@ -767,6 +833,7 @@
     removeCompany: removeCompany,
     clearImported: clearImported,
     downloadTemplate: downloadTemplate,
+    downloadExcelTemplate: downloadExcelTemplate,
     saveSettings: saveSettings,
     resetConfig: resetConfig,
     calNav: calNav,

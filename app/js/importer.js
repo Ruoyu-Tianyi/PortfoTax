@@ -1,8 +1,8 @@
 /* ============================================================
- * PortfoTax · CSV 导入模块 V2（原生 JS，零外部依赖）
+ * PortfoTax · CSV / xlsx 导入模块 V2.2（CSV 解析原生零依赖；xlsx 经本地 vendored SheetJS）
  * - parseCSV：兼容 UTF-8 BOM、引号包裹字段（内嵌逗号 / 换行 /
  *   "" 双引号转义）、CRLF / LF 行尾。
- * - 两类 CSV（按表头自动识别）：
+ * - 两类数据（CSV 按表头自动识别；xlsx 按工作表名识别）：
  *   ① 三表关键科目（每企业一行，18 列，口径同 test-data/import_template.csv）
  *   ② 申报记录（每企业每税种一行，6 列，口径同 import_template.xlsx「申报记录」表）
  * - 行级校验：逐行报错，合法行正常导入，表头错误整文件拒绝。
@@ -201,14 +201,111 @@
     "xinglian,个人所得税（代扣代缴）,2026-05,2026-06-15,2026-06-15,58\n" +
     "xinglian,企业所得税（季报）,2026-Q2,2026-07-15,,0\n";
 
+  /* ============================================================
+   * V2.2：xlsx 直接导入（SheetJS 本地化 vendor）
+   * 工作簿的二进制解析（XLSX.read）在 app.js 完成并做容错；
+   * 以下函数只依赖已解析的 workbook 对象，输出与 CSV 同构的文本，
+   * 统一走既有 parseFinanceCSV / parseFilingsCSV 校验与入库逻辑，
+   * 行级错误提示口径与 CSV 完全一致。
+   * ============================================================ */
+  var SHEET_FINANCE = "三表关键科目";
+  var SHEET_FILINGS = "申报记录";
+  var SHEET_GUIDE = "填报说明";
+
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+  /** 单元格值归一化为字符串：Date → YYYY-MM-DD；其余 → 常规字符串 */
+  function cellText(v) {
+    if (v == null) return "";
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return "";
+      return v.getFullYear() + "-" + pad2(v.getMonth() + 1) + "-" + pad2(v.getDate());
+    }
+    return String(v);
+  }
+
+  /** 二维数组 → CSV 文本（复用 csvCell 引号口径） */
+  function rowsToCSV(rows) {
+    return rows.map(function (r) { return csvRow(r.map(cellText)); }).join("\n");
+  }
+
+  /** 按表名（容忍首尾空白）查找工作表名，找不到返回 null */
+  function findSheetName(workbook, want) {
+    var names = (workbook && workbook.SheetNames) || [];
+    for (var i = 0; i < names.length; i++) {
+      if (trim(names[i]) === want) return names[i];
+    }
+    return null;
+  }
+
+  /**
+   * 从已解析的 workbook 提取「三表关键科目」与「申报记录」工作表。
+   * XLSX 参数为 SheetJS 全局对象（用于 sheet_to_json），由调用方注入。
+   * 返回 { finText, filText, errors }：
+   *  - 缺「三表关键科目」→ finText = null 并报错（整文件拒绝，与 CSV 表头错误同级）
+   *  - 缺「申报记录」→ filText = null，视为无申报记录（与 CSV 口径一致，不报错）
+   */
+  function xlsxToParts(workbook, XLSX) {
+    var errors = [], finText = null, filText = null;
+    var names = (workbook && workbook.SheetNames) || [];
+    function sheetRows(name) {
+      return XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: true, defval: "" });
+    }
+    var finName = findSheetName(workbook, SHEET_FINANCE);
+    if (!finName) {
+      errors.push("xlsx 中未找到「" + SHEET_FINANCE + "」工作表（当前工作表：" +
+        (names.join("、") || "无") + "），请下载 Excel 模板核对工作表名称");
+    } else {
+      finText = rowsToCSV(sheetRows(finName));
+    }
+    var filName = findSheetName(workbook, SHEET_FILINGS);
+    if (filName) filText = rowsToCSV(sheetRows(filName));
+    return { finText: finText, filText: filText, errors: errors };
+  }
+
+  /** V2.2 Excel 模板内容（三工作表 AOA 数据，供 app.js 用 SheetJS 生成 xlsx） */
+  function buildTemplateSheets() {
+    return [
+      { name: SHEET_GUIDE, aoa: [
+        ["PortfoTax · 被投企业月度财税数据填报模板（V2.2 Excel 直接导入）"],
+        [],
+        ["1. 本模板含两个数据表：「三表关键科目」（每企业每月一行）、「申报记录」（每企业每税种一行）。"],
+        ["2. 金额单位：万元；日期格式：YYYY-MM-DD；所属期间格式：YYYY-MM / YYYY-Qn / YYYY-FY。"],
+        ["3. 「申报完成日」留空表示尚未申报，系统将按基准日自动判定 临期(≤3天)/逾期 并估算滞纳金。"],
+        ["4. 字段口径与 app/data/demo.js 的 finance / filings 结构一一对应，导入后可直接喂给规则引擎 R1–R6。"],
+        ["5. 示例数据为虚构（yunqi / xinglian 与演示企业 ID 相同），导入前请替换为实际 ID，否则触发「重复 ID」校验。"]
+      ] },
+      { name: SHEET_FINANCE, aoa: [
+        FINANCE_HEADERS.slice(),
+        ["yunqi", "云启智造", "工业软件", "B轮", "上海·浦东", "2024-03", 1200, 1200, 1200, 180, 850, 1010, 20, 240, 240, 1260, 200, 200],
+        ["xinglian", "星链物流", "智慧物流", "C轮", "浙江·杭州", "2023-06", 5000, 4600, 4620, 250, 2000, 2230, 20, 330, 330, 5100, 800, 800]
+      ] },
+      { name: SHEET_FILINGS, aoa: [
+        FILING_HEADERS.slice(),
+        ["yunqi", "增值税", "2026-05", "2026-06-15", "2026-06-12", 78],
+        ["yunqi", "个人所得税（代扣代缴）", "2026-05", "2026-06-15", "2026-06-13", 26],
+        ["yunqi", "印花税", "2026-Q2", "2026-06-25", "", 1.2],
+        ["yunqi", "企业所得税（季报）", "2026-Q2", "2026-07-15", "", 0],
+        ["xinglian", "增值税", "2026-05", "2026-06-15", "2026-06-14", 210],
+        ["xinglian", "个人所得税（代扣代缴）", "2026-05", "2026-06-15", "2026-06-15", 58],
+        ["xinglian", "企业所得税（季报）", "2026-Q2", "2026-07-15", "", 0]
+      ] }
+    ];
+  }
+
   global.Importer = {
     FINANCE_HEADERS: FINANCE_HEADERS,
     FILING_HEADERS: FILING_HEADERS,
+    SHEET_FINANCE: SHEET_FINANCE,
+    SHEET_FILINGS: SHEET_FILINGS,
+    SHEET_GUIDE: SHEET_GUIDE,
     parseCSV: parseCSV,
     detectType: detectType,
     isValidDate: isValidDate,
     parseFinanceCSV: parseFinanceCSV,
     parseFilingsCSV: parseFilingsCSV,
+    xlsxToParts: xlsxToParts,
+    buildTemplateSheets: buildTemplateSheets,
     templateFinanceCSV: function () { return FINANCE_TEMPLATE; },
     templateFilingCSV: function () { return FILING_TEMPLATE; }
   };

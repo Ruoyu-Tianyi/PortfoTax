@@ -1,11 +1,12 @@
-# PortfoTax · 投后财税雷达（Demo · V2.1）
+# PortfoTax · 投后财税雷达（Demo · V2.2）
 
 > 主题：「AI智汇·财税创变」—— PE/VC 投后被投企业财税一致性与申报监测轻量级 Web 应用原型（demo 级）。
 
-纯前端、零构建、无后端、无数据库、零外部依赖（不引入任何 CDN 库）。演示数据均为虚构。
+纯前端、零构建、无后端、无数据库、零外部运行时依赖（第三方库均本地 vendored，不引用任何 CDN）。演示数据均为虚构。
 
 **V2 新增**：CSV 数据导入（localStorage 持久化）、基准日动态化、规则参数化（#/settings 系统设置页）。
 **V2.1 新增**：申报日历网格动态化——月份导航与默认月智能选择。
+**V2.2 新增**：xlsx 直接导入（本地化 SheetJS）与 Excel 模板下载；CSV 双文件导入方式保留，两者可混选。
 
 ## 运行方式
 
@@ -27,6 +28,31 @@
 | `#/calendar` | 申报监测日历 | 风险提醒列表（逾期按天数排序，附滞纳金估算 万分之五/日）、申报日历网格（V2.1：月份导航 + 默认月智能选择）、状态统计 |
 | `#/report/:id` | 企业体检报告 | 单企业月度财税体检报告，点「打印 / 导出 PDF」即可经浏览器打印为 PDF |
 | `#/settings` | 系统设置（V2） | 规则阈值 / 严重度分档 / 扣分权重参数化、基准日开关、配置来源标识、恢复默认 |
+
+## V2.2 xlsx 直接导入（本地化 SheetJS）
+
+V2.2 起导入面板同时接受 **.xlsx 与 .csv** 文件，可按住 Ctrl / Shift 一次多选混选：
+
+- **xlsx（推荐）**：单个 Excel 文件，按**工作表名**识别「三表关键科目」与「申报记录」两个数据表
+  （第三个「填报说明」表为说明文字，不参与解析）。缺「申报记录」表时视为暂无申报记录（与 CSV 口径一致）；
+  缺「三表关键科目」表时整文件拒绝并提示当前工作表名。
+- **CSV**：沿用 V2-1 双文件方式，按表头自动识别类型。
+- **统一校验**：xlsx 工作表先转换为与 CSV 同构的文本，再走既有 `Importer` 的行级校验与入库逻辑，
+  **行级错误提示口径与 CSV 完全一致**（行号、字段名、重复 ID / 非法日期 / 非数字等）。
+- **模板下载**：Dashboard 新增「下载 Excel 模板」（用 SheetJS 直接生成三工作表 xlsx：填报说明 / 三表关键科目 / 申报记录），
+  原「下载财务科目模板 / 下载申报记录模板」（CSV）保留。
+- **技术实现**：SheetJS 社区版完整构建本地化为 `js/vendor/xlsx.full.min.js`（普通 `<script>` 标签引入，
+  `file://` 离线可用，零 CDN）；FileReader 用 `readAsArrayBuffer` + `XLSX.read(..., { cellDates: true })`。
+- **降级容错**：vendor 库缺失或损坏时，导入面板给出琥珀色提示并仅保留 CSV 能力；xlsx 文件解析失败
+  （截断损坏 / 非 Excel 内容）时给出友好错误提示——均不影响 CSV 导入与其他页面。
+
+### vendor 依赖
+
+| 库 | 版本 | 来源 | 许可证 |
+|---|---|---|---|
+| SheetJS Community Edition（xlsx.full.min.js） | 0.20.3 | https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js | Apache-2.0 |
+
+详见 `app/js/vendor/README.md`。
 
 ## V2-1 CSV 数据导入
 
@@ -130,23 +156,28 @@ app/
 ├── js/
 │   ├── rules.js    # 纯函数规则引擎 R1–R6 + 申报状态机 + 健康分模型 + AI 解读模板（V2 参数化）
 │   ├── store.js    # V2 新增：localStorage 持久化（导入企业/规则配置/设置），内存回落
-│   ├── importer.js # V2 新增：原生 CSV 解析（BOM/引号/CRLF）+ 行级校验 + 模板生成
-│   └── app.js      # hash 路由与五个页面的渲染逻辑 + 导入/设置交互
+│   ├── importer.js # CSV 解析（BOM/引号/CRLF）+ 行级校验 + 模板生成；V2.2：xlsx 工作表提取与 Excel 模板内容
+│   ├── vendor/
+│   │   ├── xlsx.full.min.js # V2.2 新增：SheetJS 社区版 0.20.3 完整构建（本地化，Apache-2.0）
+│   │   └── README.md        # vendor 来源 / 版本 / 许可证 / 降级策略说明
+│   └── app.js      # hash 路由与五个页面的渲染逻辑 + 导入/设置交互（V2.2：xlsx 导入与 Excel 模板下载）
 └── README.md
 
 test/               # V2 新增：Node 验证脚本（不依赖浏览器）
 ├── v2_engine_tests.js  # 引擎回归 + CSV 解析 + 导入校验 + 动态基准日 + 自定义配置
 ├── v2_dom_smoke.js     # 最小 DOM 桩冒烟：全部路由渲染 + 导入/配置来源标识
-└── v21_calendar_tests.js # V2.1 新增：默认月选择 + 月份平移边界 + 日历导航渲染
+├── v21_calendar_tests.js # V2.1 新增：默认月选择 + 月份平移边界 + 日历导航渲染
+└── v22_xlsx_tests.js   # V2.2 新增：vendor SheetJS 解析 xlsx 模板 + 容错分支 + 模板生成回路
 ```
 
 ## 验证
 
 ```bash
-node --check app/js/*.js app/data/*.js test/*.js   # 语法检查
+node --check app/js/*.js app/data/*.js test/*.js   # 语法检查（vendor 第三方库除外）
 node test/v2_engine_tests.js                        # 引擎与导入功能（62 项断言）
 node test/v2_dom_smoke.js                           # DOM 桩路由冒烟（24 项断言）
 node test/v21_calendar_tests.js                     # V2.1 日历动态化（33 项断言）
+node test/v22_xlsx_tests.js                         # V2.2 xlsx 导入与模板生成（32 项断言）
 cd test-data && node verify.js                      # 既有扩展用例回归（6/6，未改动）
 ```
 
@@ -164,11 +195,17 @@ cd test-data && node verify.js                      # 既有扩展用例回归�
 ## 后续接入真实数据源
 
 1. **API 接入**：将 `data/demo.js` 替换为后端接口返回的同构 JSON（企业元信息 + `finance` 三表科目 + `filings` 申报记录）。规则引擎 `rules.js` 无需改动——只要保证字段口径一致即可复用。
-2. **Excel 导入**：V2 已提供 CSV 导入（`js/importer.js`）；如需直接导入 xlsx，可在前端引入 SheetJS，把月度填报模板解析为同构结构后复用 `Importer` 的校验与入库逻辑。
+2. ~~**Excel 导入**~~：V2.2 已实现 xlsx 直接导入（本地化 SheetJS，`js/vendor/xlsx.full.min.js`）与 Excel 模板下载，月度填报模板解析后复用 `Importer` 的校验与入库逻辑。
 3. **真实 AI 解读**：`rules.js` 中的 `AI_TEMPLATES` 目前为模板化模拟输出；正式环境可将规则命中结果（规则编号、差异金额、差异率、科目明细）作为 prompt 上下文调用大模型接口生成解读与建议。
 4. ~~数据基准日~~：V2 已实现动态基准日——导入企业按真实当天评估，演示企业可经设置开关切换。
 
 ## 更新日志
+
+### V2.2（2026-07-28）
+- **xlsx 直接导入**：导入面板接受 .xlsx 文件，按工作表名解析「三表关键科目」与「申报记录」（缺申报记录表视为无申报记录，与 CSV 口径一致）；解析结果转换为 CSV 同构文本后统一走既有 `Importer` 行级校验与入库逻辑，行级错误提示口径不变；CSV 双文件方式保留，两者可混选
+- **本地化 SheetJS**：`js/vendor/xlsx.full.min.js`（社区版 0.20.3 完整构建，Apache-2.0，来源 cdn.sheetjs.com），普通 `<script>` 标签引入，`file://` 离线可用、零 CDN；FileReader `readAsArrayBuffer` + `XLSX.read`；vendor 缺失或 xlsx 解析失败时友好降级，不影响 CSV 导入与其他页面
+- **Excel 模板下载**：Dashboard 新增「下载 Excel 模板」，用 SheetJS 生成三工作表 xlsx（填报说明 / 三表关键科目 / 申报记录）；原 CSV 模板下载保留
+- **测试**：新增 `test/v22_xlsx_tests.js`（32 项断言：模板解析字段口径 / 数值类型 / 申报行数 / 缺表与坏文件容错 / 模板生成回路 / 行级校验口径）；既有 V2 / V2.1 测试与演示回归（100/96/80/68/16/44）全绿
 
 ### V2.1（2026-07-28）
 - **申报日历网格动态化**：日历网格不再固定为 2026 年 6 月；新增「‹ 上一月 / 下一月 ›」月份导航（跨年安全）与「回到默认月」按钮，申报事项按真实截止日落格，状态着色语义不变
